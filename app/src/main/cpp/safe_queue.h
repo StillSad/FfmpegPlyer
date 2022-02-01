@@ -1,0 +1,126 @@
+//
+// Created by ice on 2022/1/29.
+//
+
+#ifndef FFMPEG_SAVE_QUEUE_H
+#define FFMPEG_SAVE_QUEUE_H
+
+#include <queue>
+#include "macro.h"
+
+using namespace std;
+
+template<typename T>
+class SafeQueue {
+    typedef void (*ReleaseCallback)(T *);
+
+public:
+    SafeQueue() {
+        pthread_mutex_init(&mutex, 0);
+        pthread_cond_init(&cond, 0);
+
+    }
+
+    ~SafeQueue() {
+        pthread_mutex_destroy(&mutex);
+        pthread_cond_destroy(&cond);
+    }
+
+    void push(T value) {
+        pthread_mutex_lock(&mutex);
+        if (work) {
+            //工作状态需要push
+            q.push(value);
+            //
+            pthread_cond_signal(&cond);
+
+        } else {
+            //非工作状态
+            if (releaseCallback) releaseCallback(&value);
+        }
+
+        pthread_mutex_unlock(&mutex);
+    }
+
+    /**
+     * 出队
+     * @param value
+     */
+    int pop(T &value) {
+        int ret = 0;
+        pthread_mutex_lock(&mutex);
+        while (work && q.empty()) {
+            //工作状态，说明确实需要pop，但是队列为空，需要等待
+            pthread_cond_wait(&cond, &mutex);
+        }
+        if (!q.empty()) {
+            value = q.front();
+            q.pop();
+            ret = 1;
+        }
+        //解锁
+        pthread_mutex_unlock(&mutex);
+        return ret;
+    }
+
+    /**
+     * 设置队列的工作状态
+     * @param work
+     */
+    void setWork(int work) {
+        pthread_mutex_lock(&mutex);
+        this->work = work;
+        pthread_cond_signal(&cond);
+        pthread_mutex_unlock(&mutex);
+    }
+
+    /**
+     * 判断队列是否为空
+     * @return
+     */
+    int empty() {
+        return q.empty();
+    }
+
+    /**
+     * 获取队列大小
+     * @return
+     */
+    int size() {
+        return q.size();
+    }
+
+
+    /**
+     * 清空队列
+     */
+    void clear() {
+        pthread_mutex_lock(&mutex);
+
+        unsigned int size = q.size();
+
+        for (int i = 0; i < size; ++i) {
+            T value = q.front();
+            if (releaseCallback)
+                releaseCallback(&value);
+            q.pop();
+        }
+
+        pthread_mutex_unlock(&mutex);
+    }
+
+    void setReleaseCallback(ReleaseCallback releaseCallback) {
+        this->releaseCallback = releaseCallback;
+    }
+
+private:
+    queue<T> q;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    //标记队列是否工作
+    int work;
+    ReleaseCallback releaseCallback;
+};
+
+
+#endif //FFMPEG_SAVE_QUEUE_H
