@@ -255,3 +255,22 @@ Java_com_ice_ffmpeg_IcePlayer_setSurfaceNative(JNIEnv *env, jobject thiz, jobjec
     pthread_mutex_unlock(&mutex);
 
 }
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_ice_ffmpeg_IcePlayer_releaseNative(JNIEnv *env, jobject thiz) {
+    pthread_mutex_lock(&mutex);
+    if (window) {
+        ANativeWindow_release(window);
+        window = 0;
+    }
+    pthread_mutex_unlock(&mutex);
+    DELETE(ffmpeg)
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_ice_ffmpeg_IcePlayer_stopNative(JNIEnv *env, jobject thiz) {
+    if (ffmpeg) {
+        ffmpeg->stop();
+    }
+}

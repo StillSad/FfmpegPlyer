@@ -16,6 +16,7 @@ extern "C" {
 
 
 class NEFFmpeg {
+    friend void *task_stop(void *args);
 public:
     NEFFmpeg(JavaCallHelper *javaCallHelper, char *dataSource);
 
@@ -32,6 +33,8 @@ public:
 
     void setRenderCallBack(RenderCallback renderCallback);
 
+    void stop();
+
 private:
     JavaCallHelper *javaCallHelper = 0;
     AudioChannel *audioChannel = 0;
@@ -41,6 +44,7 @@ private:
     char *dataSource = 0;
     pthread_t pid_prepare;
     pthread_t pid_start;
+    pthread_t pid_stop;
     bool isPlaying;
 };
 

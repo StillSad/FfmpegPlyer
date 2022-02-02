@@ -64,6 +64,17 @@ class MainActivity : AppCompatActivity() {
 //        icePlayer.prepare()
     }
 
+    override fun onStop() {
+        super.onStop()
+        icePlayer.stop()
+    }
+
+
+    override fun onDestroy() {
+        super.onDestroy()
+        icePlayer.release()
+    }
+
 
 
 }

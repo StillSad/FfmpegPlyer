@@ -78,6 +78,18 @@ class IcePlayer : SurfaceHolder.Callback {
     }
 
 
+    /**
+     * 停止播放
+     */
+    fun  stop() {
+        stopNative()
+    }
+
+    fun release() {
+        mSurfaceHolder?.removeCallback(this)
+        releaseNative()
+    }
+
     private external fun prepareNative(dataSource: String)
 
 
@@ -87,6 +99,9 @@ class IcePlayer : SurfaceHolder.Callback {
 
     external fun setSurfaceNative(surface: Surface)
 
+    external fun stopNative()
+
+    external fun releaseNative()
 
     companion object {
         private val TAG = "IcePlayer"

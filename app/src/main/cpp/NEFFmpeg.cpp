@@ -37,6 +37,25 @@ void *task_start(void *args) {
     return 0;
 }
 
+void *task_stop(void *args) {
+    NEFFmpeg *ffmpeg = static_cast<NEFFmpeg *>(args);
+
+    ffmpeg->isPlaying = 0;
+
+    pthread_join(ffmpeg->pid_prepare, 0);
+    if (ffmpeg->formatContext) {
+        avformat_close_input(&ffmpeg->formatContext);
+        avformat_free_context(ffmpeg->formatContext);
+        ffmpeg->formatContext = 0;
+    }
+
+    DELETE(ffmpeg->videoChannel);
+    DELETE(ffmpeg->audioChannel);
+    DELETE(ffmpeg);
+
+
+    return 0;
+}
 
 void NEFFmpeg::_prepare() {
     formatContext = avformat_alloc_context();
@@ -96,12 +115,12 @@ void NEFFmpeg::_prepare() {
                 videoChannel = new VideoChannel(i, codecContext, fps, tiemBase);
                 videoChannel->serRenderCallback(renderCallback);
             }
-            break;
+                break;
             case AVMEDIA_TYPE_AUDIO: {
                 //音频
                 audioChannel = new AudioChannel(i, codecContext, tiemBase);
             }
-            break;
+                break;
         }
 
 
@@ -144,9 +163,40 @@ void NEFFmpeg::start() {
     pthread_create(&pid_start, 0, task_start, this);
 }
 
+void NEFFmpeg::stop() {
+    isPlaying = 0;
+    javaCallHelper = 0;
+//    //在主线程，要保证_prepare方法执行完再释放
+//    //pthread_join调用后会阻塞，在主线程可能引发ANR
+//    pthread_join(pid_prepare,0);
+//    if (formatContext) {
+//        avformat_close_input(&formatContext);
+//        avformat_free_context(formatContext);
+//        formatContext = 0;
+//    }
+//    if (videoChannel) {
+//        videoChannel->stop();
+//    }
+//    if (audioChannel)
+//        audioChannel->stop();
+
+
+    //在子线程释放formatContext
+    pthread_create(&pid_stop, 0, task_stop, this);
+
+
+}
+
+
 void NEFFmpeg::_start() {
     while (isPlaying) {
+        //控制视频packets队列
         if (videoChannel && videoChannel->packets.size() > 100) {
+            av_usleep(10 * 1000);
+            continue;
+        }
+        //控制音频packets队列
+        if (audioChannel && audioChannel->packets.size() > 100) {
             av_usleep(10 * 1000);
             continue;
         }
@@ -167,10 +217,19 @@ void NEFFmpeg::_start() {
         } else if (ret == AVERROR_EOF) {
             //表示读完了
             //要考虑读完了，是否播完了的情况
-            //todo
+            if (videoChannel->packets.empty() && videoChannel->frames.empty()
+                && audioChannel->packets.empty() && audioChannel->frames.empty()) {
+                //播放完了
+               av_packet_free(&packet);
+            }
+
             break;
         } else {
             LOGE("读取音视频数据包失败");
+            if (javaCallHelper) {
+                javaCallHelper->onError(THREAD_CHILD,FFMPEG_READ_PACKETS_FAIL);
+            }
+            av_packet_free(&packet);
             break;
         }
     }
@@ -185,3 +244,5 @@ void NEFFmpeg::_start() {
 void NEFFmpeg::setRenderCallBack(RenderCallback renderCallback) {
     this->renderCallback = renderCallback;
 }
+
+

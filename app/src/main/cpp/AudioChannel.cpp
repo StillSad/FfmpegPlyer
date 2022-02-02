@@ -4,7 +4,8 @@
 
 #include "AudioChannel.h"
 
-AudioChannel::AudioChannel(int id, AVCodecContext *avCodecContext,AVRational timeBase) : BaseChannel(id,avCodecContext,timeBase) {
+AudioChannel::AudioChannel(int id, AVCodecContext *avCodecContext, AVRational timeBase)
+        : BaseChannel(id, avCodecContext, timeBase) {
     out_channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
     out_sample_size = av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
     out_sample_rate = 44100;
@@ -61,6 +62,36 @@ void AudioChannel::start() {
 
 
 void AudioChannel::stop() {
+    isPlaying = 0;
+    packets.setWork(0);
+    frames.setWork(0);
+
+    pthread_join(pid_audio_decode,0);
+    pthread_join(pid_audio_play,0);
+
+    //设置播放器状态为停止
+    if (bqPlayerPlay) {
+        (*bqPlayerPlay)->SetPlayState(bqPlayerPlay, SL_PLAYSTATE_STOPPED);
+    }
+    //销毁播放器
+    if (bqPlayerObject) {
+        (*bqPlayerObject)->Destroy(bqPlayerObject);
+        bqPlayerObject = 0;
+        bqPlayerBufferQueue = 0;
+    }
+    //销毁混音器
+    if (outputMixObject) {
+        (*outputMixObject)->Destroy(outputMixObject);
+        outputMixObject = 0;
+    }
+    //销毁引擎
+    if (engineObject) {
+        (*engineObject)->Destroy(engineObject);
+        engineObject = 0;
+        engineInterface = 0;
+    }
+
+
 
 }
 
