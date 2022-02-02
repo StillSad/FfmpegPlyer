@@ -16,7 +16,7 @@ extern "C" {
 
 class BaseChannel {
 public:
-    BaseChannel(int id, AVCodecContext *avCodecContext) : id(id) ,avCodecContext(avCodecContext){
+    BaseChannel(int id, AVCodecContext *avCodecContext,AVRational timeBase) : id(id) ,avCodecContext(avCodecContext), timeBase(timeBase){
         packets.setReleaseCallback(releaseAvPacket);
         frames.setReleaseCallback(releaseAVFrame);
     }
@@ -60,6 +60,8 @@ public:
     AVCodecContext *avCodecContext;
     int id;
     bool isPlaying = 0;
+     AVRational timeBase;
+    double audio_time;
 };
 
 

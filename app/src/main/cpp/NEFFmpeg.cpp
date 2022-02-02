@@ -85,6 +85,7 @@ void NEFFmpeg::_prepare() {
             LOGE("解码器打开失败");
             return;
         }
+        AVRational tiemBase = stream->time_base;
         //判断流类型
         switch (parameters->codec_type) {
             case AVMEDIA_TYPE_VIDEO: {
@@ -92,17 +93,15 @@ void NEFFmpeg::_prepare() {
                 AVRational frame_rate = stream->avg_frame_rate;
                 //计算fps
                 int fps = av_q2d(frame_rate);
-                videoChannel = new VideoChannel(i, codecContext, fps);
+                videoChannel = new VideoChannel(i, codecContext, fps, tiemBase);
                 videoChannel->serRenderCallback(renderCallback);
             }
-
-                break;
+            break;
             case AVMEDIA_TYPE_AUDIO: {
                 //音频
-                audioChannel = new AudioChannel(i, codecContext);
+                audioChannel = new AudioChannel(i, codecContext, tiemBase);
             }
-
-                break;
+            break;
         }
 
 
@@ -136,8 +135,10 @@ void NEFFmpeg::prepare() {
  */
 void NEFFmpeg::start() {
     isPlaying = 1;
-    if (videoChannel)
+    if (videoChannel) {
+        videoChannel->setAudioChannel(audioChannel);
         videoChannel->start();
+    }
     if (audioChannel)
         audioChannel->start();
     pthread_create(&pid_start, 0, task_start, this);

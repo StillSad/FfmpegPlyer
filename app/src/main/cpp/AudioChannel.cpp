@@ -4,8 +4,7 @@
 
 #include "AudioChannel.h"
 
-AudioChannel::AudioChannel(int id, AVCodecContext *avCodecContext) : BaseChannel(id,
-                                                                                 avCodecContext) {
+AudioChannel::AudioChannel(int id, AVCodecContext *avCodecContext,AVRational timeBase) : BaseChannel(id,avCodecContext,timeBase) {
     out_channels = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
     out_sample_size = av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
     out_sample_rate = 44100;
@@ -13,9 +12,25 @@ AudioChannel::AudioChannel(int id, AVCodecContext *avCodecContext) : BaseChannel
     out_buffers_size = out_channels * out_sample_size * out_sample_rate;
     out_buffers = static_cast<uint8_t *>(malloc(out_buffers_size));
     memset(out_buffers, 0, out_buffers_size);
+
+    //创建重采样上下文
+    swrContext = swr_alloc_set_opts(NULL, AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16,
+                                    out_sample_rate,
+                                    avCodecContext->channel_layout,
+                                    avCodecContext->sample_fmt,
+                                    avCodecContext->sample_rate, 0, 0);
+    //初始化重采样上下文
+    swr_init(swrContext);
+
 }
 
 AudioChannel::~AudioChannel() {
+    if (swrContext) {
+        swr_free(&swrContext);
+        swrContext = 0;
+    }
+
+    DELETE(out_buffers)
 
 }
 
@@ -197,16 +212,17 @@ void AudioChannel::audio_play() {
  */
 int AudioChannel::getPCM() {
     int pcm_data_size = 0;
-    SwrContext *swrContext = swr_alloc_set_opts(NULL, AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16,
-                                                out_sample_rate,
-                                                avCodecContext->channel_layout,
-                                                avCodecContext->sample_fmt,
-                                                avCodecContext->sample_rate, 0, 0);
-
-    //初始化重采样上下文
-    swr_init(swrContext);
-
     AVFrame *frame = 0;
+
+//    SwrContext *swrContext = swr_alloc_set_opts(NULL, AV_CH_LAYOUT_STEREO, AV_SAMPLE_FMT_S16,
+//                                                out_sample_rate,
+//                                                avCodecContext->channel_layout,
+//                                                avCodecContext->sample_fmt,
+//                                                avCodecContext->sample_rate, 0, 0);
+//
+//    //初始化重采样上下文
+//    swr_init(swrContext);
+
     while (isPlaying) {
         int ret = frames.pop(frame);
         if (!isPlaying) {
@@ -224,7 +240,8 @@ int AudioChannel::getPCM() {
         //两个数据之间的时间间隔
         int64_t delay = swr_get_delay(swrContext, frame->sample_rate);
         //输出缓冲取能容纳的最大数据量
-        int64_t out_max_samples = av_rescale_rnd(frame->nb_samples + delay,frame->sample_rate,out_sample_rate,AV_ROUND_UP);
+        int64_t out_max_samples = av_rescale_rnd(frame->nb_samples + delay, frame->sample_rate,
+                                                 out_sample_rate, AV_ROUND_UP);
 
 
         int out_samples = swr_convert(swrContext,
@@ -232,6 +249,8 @@ int AudioChannel::getPCM() {
                                       (const uint8_t **) (frame->data), frame->nb_samples);
 
         pcm_data_size = out_samples * out_sample_size * out_channels;
+        //获取音频时间
+        audio_time = frame->best_effort_timestamp * av_q2d(timeBase);
 
         break;
 
